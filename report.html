@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>월간 경영 보고서 - 대경 Tracking</title>
+  <link rel="stylesheet" href="css/style.css?v=1233">
+</head>
+<body class="executive-report-page">
+<div class="app">
+  <aside class="side">
+    <div class="brand">대경 Tracking</div>
+    <div class="sub">의료기기 재고 · 선납 · 사용 · 회수 관리</div>
+    <nav class="nav">
+      <a class="page-link" href="index.html">📊 Dashboard</a>
+      <a class="page-link" href="transaction.html">🧾 거래관리</a>
+      <a class="page-link" href="inventory.html">📦 재고관리</a>
+      <a class="page-link" href="master.html">📁 품목 Master</a>
+      <a class="page-link" href="hospital.html">🏥 거래처 Master</a>
+      <a class="page-link" href="hospital_price.html">🏷️ 병원별 판매단가</a>
+      <a class="page-link" href="price.html">💰 단가관리</a>
+      <a class="page-link" href="monthly_close.html">🗓️ 월별 마감</a>
+      <a class="page-link active" href="report.html">📈 보고서</a>
+      <a class="page-link" href="audit.html">🔍 재고 감사</a>
+      <a class="page-link" href="settings.html">⚙️ 환경설정</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <div><div class="title">월간 경영 보고서</div><div class="hint">대표자 의사결정을 위한 월간 실적·수익성·재고 위험 요약입니다.</div></div>
+      <div class="actions"></div>
+    </div>
+
+    <section class="report-controls no-print">
+      <div class="card compact monthly-period-bar">
+        <div><label for="reportMonth">보고 기준월</label><input id="reportMonth" type="month" onchange="renderReport()"></div>
+        <div class="report-control-actions"><span id="reportCloseBadge" class="pill info">마감 전</span><button class="btn primary" onclick="window.print()">보고서 인쇄</button><button class="btn" onclick="exportReportCSV()">CSV 내보내기</button></div>
+      </div>
+    </section>
+
+    <section id="executiveReport" class="executive-report">
+      <header class="report-cover">
+        <div class="report-cover-brand">DAEKYUNG INTERVENTION</div>
+        <h1>월간 경영 보고서</h1>
+        <div id="reportPeriodTitle" class="report-period-title"></div>
+        <div class="report-cover-meta"><span id="reportGeneratedAt"></span><span id="reportStatusText"></span></div>
+      </header>
+
+      <div class="report-section executive-summary-section">
+        <div class="report-section-head"><div><span class="section-number">01</span><h2>Executive Summary</h2></div><span class="report-section-note">핵심 현황 및 조치 필요사항</span></div>
+        <div class="executive-kpi-grid">
+          <article class="executive-kpi primary"><span>월 사용매출</span><strong id="rKpiMonthlySales">0원</strong><small id="rSalesDelta">전월 대비 -</small></article>
+          <article class="executive-kpi success"><span>예상마진</span><strong id="rKpiMonthlyMargin">0원</strong><small id="rMarginRate">마진율 0.0%</small></article>
+          <article class="executive-kpi violet"><span>월 사용수량</span><strong id="rKpiUse">0</strong><small id="rUseDelta">전월 대비 -</small></article>
+          <article class="executive-kpi navy"><span>월말 재고금액</span><strong id="rKpiInventoryValue">0원</strong><small id="rInventoryMix">사무실 0% · 거래처 0%</small></article>
+          <article class="executive-kpi amber"><span>월말 현재고</span><strong id="rKpiCurrent">0</strong><small id="rStockDelta">월초 대비 -</small></article>
+          <article class="executive-kpi danger"><span>관리 필요 항목</span><strong id="rKpiRiskCount">0</strong><small id="rRiskDetail">이상 항목 없음</small></article>
+        </div>
+        <div class="executive-brief"><h3>대표자 요약</h3><ul id="executiveBrief"></ul></div>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-head"><div><span class="section-number">02</span><h2>전월 대비 실적</h2></div><span class="report-section-note">증감 방향과 규모 확인</span></div>
+        <div class="comparison-grid" id="monthlyComparison"></div>
+      </div>
+
+      <div class="report-section report-page-break">
+        <div class="report-section-head"><div><span class="section-number">03</span><h2>거래처별 성과</h2></div><span class="report-section-note">사용매출 기준 상위 거래처</span></div>
+        <div class="table-wrap auto report-table-wrap"><table class="executive-table"><thead><tr><th>순위</th><th>거래처</th><th class="num">사용수량</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">예상마진</th><th class="num">마진율</th><th class="num">거래건수</th></tr></thead><tbody id="reportHospitalPerformance"></tbody></table></div>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-head"><div><span class="section-number">04</span><h2>품목별 성과</h2></div><span class="report-section-note">사용매출 기준 상위 품목</span></div>
+        <div class="table-wrap auto report-table-wrap"><table class="executive-table"><thead><tr><th>순위</th><th>ID</th><th>품목명</th><th class="num">사용수량</th><th class="num">매출</th><th class="num">예상마진</th><th class="num">월말재고</th><th class="num">재고금액</th></tr></thead><tbody id="reportProductPerformance"></tbody></table></div>
+      </div>
+
+      <div class="report-section report-page-break">
+        <div class="report-section-head"><div><span class="section-number">05</span><h2>재고 현황</h2></div><span class="report-section-note">위치별 월초·월말 및 재고가치</span></div>
+        <div class="table-wrap auto report-table-wrap"><table class="executive-table"><thead><tr><th>위치</th><th class="num">월초재고</th><th class="num">월말재고</th><th class="num">재고금액</th><th class="num">입고</th><th class="num">사용</th><th class="num">선납</th><th class="num">회수</th></tr></thead><tbody id="reportLocationSummary"></tbody></table></div>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-head"><div><span class="section-number">06</span><h2>위험 및 조치사항</h2></div><span class="report-section-note">다음 달 우선 점검 대상</span></div>
+        <div id="reportRiskCards" class="risk-card-grid"></div>
+      </div>
+
+      <footer class="report-footer"><span>대경인터벤션 월간 경영 보고서</span><span id="reportFooterPeriod"></span></footer>
+    </section>
+  </main>
+</div>
+<script src="js/vendor-core.js?v=1214"></script><script src="js/config.js?v=1214"></script><script src="js/cloud.js?v=1228"></script><script src="js/common.js?v=1233"></script><script src="js/report.js?v=1233"></script>
+</body>
+</html>
