@@ -122,21 +122,37 @@
     const incomingRows=normalizeEventIds(incoming,prefix);
     return mergeRows(baseRows,incomingRows,(row,index)=>String(row?.id||eventSignature(row)||`event-${index}`));
   }
+  function normalizeProductName(value){
+    return String(value||'').normalize('NFKC').trim().toLowerCase().replace(/\s+/g,' ');
+  }
+  function canonicalProductId(value,aliases){
+    let id=String(value||''),guard=0;
+    while(id&&aliases&&aliases[id]&&aliases[id]!==id&&guard<20){id=String(aliases[id]);guard++;}
+    return id;
+  }
+  function remapProductRows(rows,aliases){
+    return (Array.isArray(rows)?rows:[]).map(row=>row&&typeof row==='object'?Object.assign({},row,{productId:canonicalProductId(row.productId,aliases)}):row);
+  }
   function safeMergeState(remote,incoming){
     if(!remote||typeof remote!=='object')return incoming;
     if(!incoming||typeof incoming!=='object')return remote;
     const out=Object.assign({},remote,incoming);
-    out.products=mergeRows(remote.products,incoming.products,(x,i)=>String(x?.id||x?.name||`product-${i}`));
+    const aliases=Object.assign({},remote.settings?.productIdAliases||{},incoming.settings?.productIdAliases||{});
+    out.settings=Object.assign({},remote.settings||{},incoming.settings||{},{productIdAliases:aliases});
+    out.products=mergeRows(remote.products,incoming.products,(x,i)=>normalizeProductName(x?.name)||String(x?.id||`product-${i}`));
     out.hospitals=mergeRows(remote.hospitals,incoming.hospitals,(x,i)=>String(x?.code||x?.name||`hospital-${i}`));
-    out.hospitalPrices=mergeRows(remote.hospitalPrices,incoming.hospitalPrices,(x,i)=>`${x?.hospitalName||''}::${x?.productId||i}`);
-    out.monthlyClosings=mergeRows(remote.monthlyClosings,incoming.monthlyClosings,(x,i)=>String(x?.month||x?.id||`closing-${i}`));
+    out.hospitalPrices=mergeRows(remapProductRows(remote.hospitalPrices,aliases),remapProductRows(incoming.hospitalPrices,aliases),(x,i)=>`${x?.hospitalName||''}::${x?.productId||i}`);
+    out.monthlyClosings=mergeRows(remote.monthlyClosings,incoming.monthlyClosings,(x,i)=>String(x?.month||x?.id||`closing-${i}`)).map(closing=>Object.assign({},closing,{lines:remapProductRows(closing?.lines,aliases)}));
     out.deletedTransactionIds=[...new Set([...(remote.deletedTransactionIds||[]),...(incoming.deletedTransactionIds||[])].map(String))];
-    out.transactions=mergeEventRows(remote.transactions,incoming.transactions,'tx').filter(row=>!out.deletedTransactionIds.includes(String(row?.id||'')));
-    out.overuses=mergeEventRows(remote.overuses,incoming.overuses,'overuse');
+    out.transactions=mergeEventRows(remapProductRows(remote.transactions,aliases),remapProductRows(incoming.transactions,aliases),'tx').filter(row=>!out.deletedTransactionIds.includes(String(row?.id||'')));
+    out.overuses=mergeEventRows(remapProductRows(remote.overuses,aliases),remapProductRows(incoming.overuses,aliases),'overuse');
     out.history=mergeEventRows(remote.history,incoming.history,'history').slice(0,1000);
     const remoteAudit=remote.audit||{},incomingAudit=incoming.audit||{};
     out.audit=Object.assign({},remoteAudit,incomingAudit);
-    ['system','physical','result'].forEach(key=>{out.audit[key]=mergeRows(remoteAudit[key],incomingAudit[key],(x,i)=>String(x?.id||JSON.stringify(x)||`${key}-${i}`));});
+    ['system','physical','result'].forEach(key=>{out.audit[key]=mergeRows(remapProductRows(remoteAudit[key],aliases),remapProductRows(incomingAudit[key],aliases),(x,i)=>String(x?.id||JSON.stringify(x)||`${key}-${i}`));});
+    const inboundMappings=Object.assign({},remote.settings?.inboundMappings||{},incoming.settings?.inboundMappings||{});
+    Object.keys(inboundMappings).forEach(key=>{inboundMappings[key]=canonicalProductId(inboundMappings[key],aliases);});
+    out.settings.inboundMappings=inboundMappings;
     return out;
   }
   async function pushState(state,reason){
