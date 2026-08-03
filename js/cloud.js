@@ -162,7 +162,8 @@
     try{
       const {data:current,error:currentError}=await c.from('app_state').select('state_data,updated_at,last_reason').eq('workspace_id',cfg.workspaceId).maybeSingle();
       if(currentError)throw currentError;
-      const destructiveReason=['reset','restore'].includes(String(reason||''));
+      const reasonText=String(reason||'');
+      const destructiveReason=reasonText==='restore'||reasonText.startsWith('reset');
       const finalState=destructiveReason?state:safeMergeState(current?.state_data,state);
       if(current?.state_data && !destructiveReason){
         const slot=Math.floor(Date.now()/60000)%10;

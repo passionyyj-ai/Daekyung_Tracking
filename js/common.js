@@ -94,6 +94,7 @@ function migrateState(raw) {
   return next;
 }
 function recoverMissingMasterData(current){
+  if(String(current?.meta?.lastSaveReason||'').startsWith('reset'))return current;
   const recovered=current;
   for(const key of LEGACY_STORE_KEYS){
     try{
@@ -120,7 +121,7 @@ function mergeStateWithoutLoss(base,incoming){
   return importantStateScore(incoming)>=importantStateScore(base)?migrateState(incoming):migrateState(base);
 }
 function recoverFromLocalSnapshots(current){
-  if(current?.meta?.lastSaveReason==='reset')return current;
+  if(String(current?.meta?.lastSaveReason||'').startsWith('reset'))return current;
   let recovered=current;
   for(let slot=0;slot<10;slot++){
     try{
@@ -154,7 +155,7 @@ function loadState() {
 function saveState(reason='auto') {
   try {
     const previous=localStorage.getItem(STORE_KEY);
-    if(previous && reason!=='reset'){
+    if(previous && !String(reason||'').startsWith('reset')){
       try{
         const previousState=JSON.parse(previous);
         if(importantStateScore(previousState)>0){const slot=Math.floor(Date.now()/60000)%10;localStorage.setItem(`${LOCAL_SNAPSHOT_PREFIX}${slot}`,previous);}
@@ -201,7 +202,20 @@ async function confirmAndCommitReset(label,reason,mutate){
 }
 async function resetAll(){
   const preservedSettings=clone(state.settings||{});
-  return confirmAndCommitReset('전체 초기화','reset-all',()=>{state=initialState();state.settings=preservedSettings;});
+  return confirmAndCommitReset('전체 초기화','reset-all',()=>{
+    state=initialState();
+    state.products=[];
+    state.transactions=[];
+    state.deletedTransactionIds=[];
+    state.overuses=[];
+    state.history=[];
+    state.hospitals=[];
+    state.hospitalPrices=[];
+    state.monthlyClosings=[];
+    state.audit={system:[],physical:[],result:[],source:''};
+    state.lots=[];
+    state.settings=preservedSettings;
+  });
 }
 async function resetTransactions(){return confirmAndCommitReset('거래내역 초기화','reset-transactions',()=>{state.transactions=[];state.deletedTransactionIds=[];state.overuses=[];state.monthlyClosings=[];state.history=(state.history||[]).filter(row=>!['거래','거래등록','거래수정','거래삭제','과사용','월마감','월마감재오픈'].includes(row.type));});}
 async function resetInventory(){return confirmAndCommitReset('재고 등록자료 초기화','reset-inventory',()=>{(state.products||[]).forEach(p=>Object.values(p.stock||{}).forEach(cell=>{Object.keys(cell||{}).forEach(key=>cell[key]=0);}));});}
