@@ -153,20 +153,6 @@ function handleMasterUpload(e){
     e.target.value='';
   });
 }
-async function applyPreparedProductIdUpdate(){
-  const result=byId('masterUploadResult');
-  try{
-    if(result)result.innerHTML='<span class="pill">준비된 품목 ID 파일을 불러오는 중입니다.</span>';
-    const response=await fetch('./sample/ProductMaster_upload_ID_researched.xlsx?v=1237',{cache:'no-store'});
-    if(!response.ok)throw new Error(`파일을 불러오지 못했습니다. (${response.status})`);
-    const blob=await response.blob();
-    const file=new File([blob],'ProductMaster_upload_ID_researched.xlsx',{type:blob.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    handleMasterUpload({target:{files:[file],value:''}});
-  }catch(error){
-    if(result)result.innerHTML=`<span class="pill danger">${String(error?.message||error)}</span>`;
-    alert(`준비된 품목 ID 업데이트 파일을 불러오지 못했습니다.\n${String(error?.message||error)}`);
-  }
-}
 function downloadMasterUploadSample(){
   const rows=[['ID','제품카테고리','품목명','매입단가','기본판매단가'],['P999','Guidewire','Sample Guidewire',10000,15000]];
   download('ProductMaster_upload.csv',toCSV(rows),'text/csv;charset=utf-8');
