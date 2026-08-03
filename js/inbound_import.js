@@ -9,8 +9,15 @@ function inboundValue(row,names){
 }
 function inboundText(value){return String(value??'').trim();}
 function inboundNormalizeName(value){return inboundText(value).toLowerCase().replace(/[^a-z0-9가-힣]+/g,'');}
-function inboundSourceKey(row){
+function inboundTransactionType(detailType){
+  const normalized=inboundNormalizeName(detailType);
+  return /반품|회수/.test(normalized)?'회수':'입고';
+}
+function inboundLegacySourceKey(row){
   return ['inbound',row.slip,row.externalCode,row.lot,row.serial,row.date,row.sourceRow].join('|');
+}
+function inboundSourceKey(row){
+  return [inboundLegacySourceKey(row),inboundTransactionType(row.detailType)].join('|');
 }
 function inboundSourceId(row){return `tx-inbound-${shortStableHash(inboundSourceKey(row))}`;}
 function inboundMappings(){
@@ -84,7 +91,7 @@ function inboundRowStatus(row,existingKeys=existingInboundKeys()){
   if(!row.date)return {key:'invalid',label:'일자 없음'};
   if(!group?.productId)return {key:'unmatched',label:'매칭 필요'};
   if(isMonthClosed(row.date))return {key:'closed',label:'마감월'};
-  if(existingKeys.has(inboundSourceKey(row))||(state.transactions||[]).some(tx=>String(tx.id)===inboundSourceId(row)))return {key:'duplicate',label:'이미 등록'};
+  if(existingKeys.has(inboundSourceKey(row))||existingKeys.has(inboundLegacySourceKey(row))||(state.transactions||[]).some(tx=>String(tx.id)===inboundSourceId(row)))return {key:'duplicate',label:'이미 등록'};
   return {key:'ready',label:'등록 가능'};
 }
 function renderInboundSummary(){
@@ -96,8 +103,13 @@ function renderInboundSummary(){
   byId('inboundMatchedCount').textContent=qty(inboundGroups.filter(group=>group.productId).length);
   byId('inboundUnmatchedCount').textContent=qty(inboundGroups.filter(group=>!group.productId).length);
   byId('inboundDuplicateCount').textContent=qty(statusRows.filter(status=>status.key==='duplicate').length);
+  const readyRows=inboundRows.filter((row,index)=>statusRows[index].key==='ready');
+  const incomingRows=readyRows.filter(row=>inboundTransactionType(row.detailType)==='입고');
+  const recoveryRows=readyRows.filter(row=>inboundTransactionType(row.detailType)==='회수');
+  if(byId('inboundIncomingCount'))byId('inboundIncomingCount').textContent=qty(incomingRows.length);
+  if(byId('inboundRecoveryCount'))byId('inboundRecoveryCount').textContent=qty(recoveryRows.length);
   const ready=statusRows.filter(status=>status.key==='ready').length;
-  byId('inboundCommitHint').textContent=`현재 ${ready.toLocaleString('ko-KR')}건을 사무실 입고로 등록할 수 있습니다.`;
+  byId('inboundCommitHint').textContent=`현재 ${ready.toLocaleString('ko-KR')}건(입고 ${incomingRows.length.toLocaleString('ko-KR')}건 / 회수 ${recoveryRows.length.toLocaleString('ko-KR')}건)을 등록할 수 있습니다.`;
   byId('inboundCommitBtn').disabled=ready===0;
 }
 function renderInboundMappings(){
@@ -133,14 +145,14 @@ function renderInboundPreview(){
   const body=byId('inboundPreviewTable');if(!body)return;
   const existing=existingInboundKeys();
   body.innerHTML=inboundRows.slice(0,500).map(row=>{
-    const group=groupForInboundRow(row),product=state.products.find(item=>String(item.id)===String(group?.productId||'')),status=inboundRowStatus(row,existing);
-    return `<tr><td><span class="pill ${status.key==='ready'?'ok':status.key==='unmatched'||status.key==='invalid'?'warn':''}">${status.label}</span></td><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.slip)}</td><td>${escapeHtml(row.externalCode)}</td><td>${escapeHtml(product?inboundProductLabel(product):'')}</td><td>${qty(row.qty)}</td><td>${escapeHtml(row.lot)}</td><td>${escapeHtml(row.serial)}</td></tr>`;
-  }).join('')||'<tr><td colspan="8" class="empty">업로드한 자료가 없습니다.</td></tr>';
+    const group=groupForInboundRow(row),product=state.products.find(item=>String(item.id)===String(group?.productId||'')),status=inboundRowStatus(row,existing),txType=inboundTransactionType(row.detailType);
+    return `<tr><td><span class="pill ${status.key==='ready'?'ok':status.key==='unmatched'||status.key==='invalid'?'warn':''}">${status.label}</span></td><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.slip)}</td><td>${escapeHtml(row.detailType||'-')}</td><td><span class="pill ${txType==='회수'?'warn':'ok'}">${txType}</span></td><td>${escapeHtml(row.externalCode)}</td><td>${escapeHtml(product?inboundProductLabel(product):'')}</td><td>${qty(row.qty)}</td><td>${escapeHtml(row.lot)}</td><td>${escapeHtml(row.serial)}</td></tr>`;
+  }).join('')||'<tr><td colspan="10" class="empty">업로드한 자료가 없습니다.</td></tr>';
 }
 function renderInboundAll(){renderInboundSummary();renderInboundMappings();renderInboundPreview();}
 function commitInboundTransactions(){
   const existing=existingInboundKeys(),now=new Date().toISOString();
-  let added=0,duplicate=0,unmatched=0,invalid=0,closed=0;
+  let added=0,incoming=0,recovery=0,duplicate=0,unmatched=0,invalid=0,closed=0;
   const newRows=[];
   inboundRows.forEach(row=>{
     const status=inboundRowStatus(row,existing);
@@ -148,20 +160,20 @@ function commitInboundTransactions(){
       if(status.key==='duplicate')duplicate++;else if(status.key==='unmatched')unmatched++;else if(status.key==='closed')closed++;else invalid++;
       return;
     }
-    const group=groupForInboundRow(row),sourceKey=inboundSourceKey(row);
+    const group=groupForInboundRow(row),sourceKey=inboundSourceKey(row),txType=inboundTransactionType(row.detailType);
     newRows.push({
-      id:inboundSourceId(row),date:row.date,location:'사무실',type:'입고',productId:group.productId,qty:Number(row.qty||0),
+      id:inboundSourceId(row),date:row.date,location:'사무실',type:txType,productId:group.productId,qty:Number(row.qty||0),
       memo:[`입고자료 전표 ${row.slip||'-'}`,`제품코드 ${row.externalCode||'-'}`,row.detailType?`상세구분 ${row.detailType}`:'',row.lot?`LOT ${row.lot}`:'',row.serial?`SERIAL ${row.serial}`:'',row.warehouse?`창고 ${row.warehouse}`:''].filter(Boolean).join(' / '),
       source:'inbound-import',inboundSourceKey:sourceKey,externalProductCode:row.externalCode,sourceProductName:row.sourceName,slipNumber:row.slip,lotNo:row.lot,serialNo:row.serial,createdAt:now,updatedAt:now
     });
-    existing.add(sourceKey);added++;
+    existing.add(sourceKey);added++;if(txType==='회수')recovery++;else incoming++;
   });
-  if(!added){alert('등록 가능한 입고자료가 없습니다. 제품 매칭과 중복·마감 상태를 확인하세요.');return;}
-  if(!confirm(`사무실 입고 ${added.toLocaleString('ko-KR')}건을 등록할까요?\n동일 자료는 다시 업로드해도 중복 등록되지 않습니다.`))return;
+  if(!added){alert('등록 가능한 입고·회수 자료가 없습니다. 제품 매칭과 중복·마감 상태를 확인하세요.');return;}
+  if(!confirm(`사무실 거래 ${added.toLocaleString('ko-KR')}건(입고 ${incoming.toLocaleString('ko-KR')}건 / 회수 ${recovery.toLocaleString('ko-KR')}건)을 등록할까요?\n동일 자료는 다시 업로드해도 중복 등록되지 않습니다.`))return;
   state.transactions.unshift(...newRows);
   inboundGroups.forEach(group=>{if(group.externalCode&&group.productId)inboundMappings()[group.externalCode]=group.productId;});
-  addHistory('사무실 입고자료 업로드',byId('inboundFileName')?.textContent||'입고자료',added);
-  byId('inboundCommitResult').innerHTML=`<span class="pill ok">${added}건 등록 완료</span>${duplicate?` <span class="pill">중복 ${duplicate}건 제외</span>`:''}${unmatched?` <span class="pill warn">미매칭 ${unmatched}건 제외</span>`:''}${closed?` <span class="pill warn">마감월 ${closed}건 제외</span>`:''}${invalid?` <span class="pill warn">자료 오류 ${invalid}건 제외</span>`:''}`;
+  addHistory('사무실 입고·회수자료 업로드',byId('inboundFileName')?.textContent||'입고자료',added);
+  byId('inboundCommitResult').innerHTML=`<span class="pill ok">${added}건 등록 완료</span> <span class="pill">입고 ${incoming}건</span> <span class="pill warn">회수 ${recovery}건</span>${duplicate?` <span class="pill">중복 ${duplicate}건 제외</span>`:''}${unmatched?` <span class="pill warn">미매칭 ${unmatched}건 제외</span>`:''}${closed?` <span class="pill warn">마감월 ${closed}건 제외</span>`:''}${invalid?` <span class="pill warn">자료 오류 ${invalid}건 제외</span>`:''}`;
   renderInboundAll();
 }
 document.addEventListener('DOMContentLoaded',populateInboundProductOptions);

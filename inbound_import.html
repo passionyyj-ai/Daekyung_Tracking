@@ -31,7 +31,7 @@
     <div class="top">
       <div>
         <div class="title">사무실 입고 변환</div>
-        <div class="hint">거래처 입고자료를 품목 Master와 연결한 뒤 사무실 입고 거래로 등록합니다.</div>
+        <div class="hint">거래처 입고자료를 품목 Master와 연결하고 상세구분에 따라 사무실 입고·회수 거래로 등록합니다.</div>
       </div>
       <div class="actions"></div>
     </div>
@@ -54,6 +54,8 @@
           <div class="ok"><small>매칭 완료</small><strong id="inboundMatchedCount">0</strong></div>
           <div class="warn"><small>매칭 필요</small><strong id="inboundUnmatchedCount">0</strong></div>
           <div><small>이미 등록</small><strong id="inboundDuplicateCount">0</strong></div>
+          <div class="ok"><small>등록 가능 입고</small><strong id="inboundIncomingCount">0</strong></div>
+          <div class="warn"><small>등록 가능 회수</small><strong id="inboundRecoveryCount">0</strong></div>
         </div>
       </div>
 
@@ -78,7 +80,7 @@
       </div>
 
       <div id="inboundPreviewCard" class="card inbound-step-card hidden">
-        <div class="inbound-step-title"><span>4</span><div><h3>사무실 입고 등록</h3><p class="hint">매칭 완료·미등록·미마감 자료만 등록됩니다. 전표번호와 제품코드 등으로 중복을 차단합니다.</p></div></div>
+        <div class="inbound-step-title"><span>4</span><div><h3>사무실 입고·회수 등록</h3><p class="hint">E열 상세구분에 반품 또는 회수가 포함되면 회수, 그 외에는 입고로 등록합니다. 전표번호와 제품코드 등으로 중복을 차단합니다.</p></div></div>
         <div class="toolbar">
           <button id="inboundCommitBtn" type="button" class="btn primary" onclick="commitInboundTransactions()">등록 가능한 자료 반영</button>
           <span id="inboundCommitHint" class="hint"></span>
@@ -86,7 +88,7 @@
         <div id="inboundCommitResult" class="mt"></div>
         <div class="table-wrap inbound-preview-table-wrap mt">
           <table>
-            <thead><tr><th>상태</th><th>입고일</th><th>전표번호</th><th>제품코드</th><th>품목 Master</th><th>수량</th><th>LOT</th><th>SERIAL</th></tr></thead>
+            <thead><tr><th>상태</th><th>입고일</th><th>전표번호</th><th>상세구분</th><th>등록구분</th><th>제품코드</th><th>품목 Master</th><th>수량</th><th>LOT</th><th>SERIAL</th></tr></thead>
             <tbody id="inboundPreviewTable"></tbody>
           </table>
         </div>
@@ -98,6 +100,6 @@
 <script src="js/config.js?v=1214"></script>
 <script src="js/cloud.js?v=1239"></script>
 <script src="js/common.js?v=1239"></script>
-<script src="js/inbound_import.js?v=1235"></script>
+<script src="js/inbound_import.js?v=1240"></script>
 </body>
 </html>
