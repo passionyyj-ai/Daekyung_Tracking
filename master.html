@@ -68,6 +68,11 @@
   <div class="card compact">
     <h3>엑셀 일괄 등록</h3>
     <div class="toolbar">
+      <button class="btn primary" onclick="applyPreparedProductIdUpdate()">준비된 품목 ID 업데이트 적용</button>
+      <span class="pill ok">v12.37 · 기존 304개 매칭 / ID 270개 변경 예정</span>
+    </div>
+    <p class="hint mt">첨부된 <strong>ProductMaster_upload_ID_researched.xlsx</strong>를 품목명 기준으로 적용합니다. 버튼을 누른 뒤 변경 요약을 확인해야 Cloud 데이터가 실제로 변경됩니다.</p>
+    <div class="toolbar">
       <a class="btn" href="./sample/ProductMaster_upload.xlsx" download="ProductMaster_upload.xlsx">업로드 샘플 다운로드</a>
       <button class="btn" onclick="exportMasterCSV()">Master CSV 내보내기</button>
       <input type="file" accept=".xlsx,.xls" onchange="handleMasterUpload(event)">
@@ -89,6 +94,6 @@
   </main>
 </div>
 <script src="js/vendor-core.js?v=1214"></script><script src="js/config.js?v=1214"></script><script src="js/cloud.js?v=1236"></script><script src="js/common.js?v=1235"></script>
-<script src="js/master.js?v=1236"></script>
+<script src="js/master.js?v=1237"></script>
 </body>
 </html>
