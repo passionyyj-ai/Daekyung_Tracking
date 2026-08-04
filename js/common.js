@@ -475,20 +475,20 @@ function salePrice(p, hospital) { return Number((p.salePrices||{})[hospital] || 
 function purchasePrice(p) { return Number(p.purchasePrice||0); }
 function readWorkbook(file, cb) { const reader=new FileReader(); reader.onload=e=>{ try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; cb(XLSX.utils.sheet_to_json(ws,{defval:''}));}catch(error){console.error('Excel read failed',error);alert('엑셀 파일을 읽지 못했습니다. 업로드 샘플 양식인지 확인하세요.');} }; reader.onerror=()=>alert('엑셀 파일을 읽지 못했습니다.'); reader.readAsArrayBuffer(file); }
 function updateNav() { const page=location.pathname.split('/').pop()||'index.html'; document.querySelectorAll('.page-link').forEach(a=>{ if((a.getAttribute('href')||'').split('?')[0]===page) a.classList.add('active'); }); }
-const DK_PAGE_VERSION='1235';
+const DK_PAGE_VERSION='1242';
 const DK_MENU_DEFS=[
-  ['dashboard','Dashboard','index.html'],['transactions','거래관리','transaction.html'],['inboundImport','사무실 입고 변환','inbound_import.html'],['inventory','재고관리','inventory.html'],
+  ['dashboard','Dashboard','index.html'],['transactions','거래관리','transaction.html'],['inventory','재고관리','inventory.html'],
   ['products','품목 Master','master.html'],['hospitals','거래처 Master','hospital.html'],['hospitalPrices','병원별 판매단가','hospital_price.html'],
   ['prices','단가관리','price.html'],['monthlyClose','월별 마감','monthly_close.html'],['reports','보고서','report.html'],['audit','재고 감사','audit.html'],['settings','환경설정','settings.html']
 ];
 const DK_ROLE_LABELS={admin:'관리자',inventory:'재고담당',sales:'영업담당',viewer:'조회전용'};
 const DK_DEFAULT_ROLE_ACCESS={
-  admin:['dashboard','transactions','inboundImport','inventory','products','hospitals','hospitalPrices','prices','monthlyClose','reports','audit','settings'],
-  inventory:['dashboard','transactions','inboundImport','inventory','products','hospitals','monthlyClose','reports','audit'],
+  admin:['dashboard','transactions','inventory','products','hospitals','hospitalPrices','prices','monthlyClose','reports','audit','settings'],
+  inventory:['dashboard','transactions','inventory','products','hospitals','monthlyClose','reports','audit'],
   sales:['dashboard','transactions','inventory','hospitals','hospitalPrices','prices','monthlyClose','reports'],
   viewer:['dashboard','inventory','reports']
 };
-const DK_MENU_ICONS={dashboard:'📊',transactions:'🧾',inboundImport:'📥',inventory:'📦',products:'📁',hospitals:'🏥',hospitalPrices:'🏷️',prices:'💰',monthlyClose:'🗓️',reports:'📈',audit:'🔍',settings:'⚙️'};
+const DK_MENU_ICONS={dashboard:'📊',transactions:'🧾',inventory:'📦',products:'📁',hospitals:'🏥',hospitalPrices:'🏷️',prices:'💰',monthlyClose:'🗓️',reports:'📈',audit:'🔍',settings:'⚙️'};
 function ensureNavigationMenu(){
   const nav=document.querySelector('.nav');if(!nav)return;
   DK_MENU_DEFS.forEach(([key,label,href])=>{
