@@ -475,7 +475,7 @@ function salePrice(p, hospital) { return Number((p.salePrices||{})[hospital] || 
 function purchasePrice(p) { return Number(p.purchasePrice||0); }
 function readWorkbook(file, cb) { const reader=new FileReader(); reader.onload=e=>{ try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; cb(XLSX.utils.sheet_to_json(ws,{defval:''}));}catch(error){console.error('Excel read failed',error);alert('엑셀 파일을 읽지 못했습니다. 업로드 샘플 양식인지 확인하세요.');} }; reader.onerror=()=>alert('엑셀 파일을 읽지 못했습니다.'); reader.readAsArrayBuffer(file); }
 function updateNav() { const page=location.pathname.split('/').pop()||'index.html'; document.querySelectorAll('.page-link').forEach(a=>{ if((a.getAttribute('href')||'').split('?')[0]===page) a.classList.add('active'); }); }
-const DK_PAGE_VERSION='1242';
+const DK_PAGE_VERSION='1243';
 const DK_MENU_DEFS=[
   ['dashboard','Dashboard','index.html'],['transactions','거래관리','transaction.html'],['inventory','재고관리','inventory.html'],
   ['products','품목 Master','master.html'],['hospitals','거래처 Master','hospital.html'],['hospitalPrices','병원별 판매단가','hospital_price.html'],
