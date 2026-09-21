@@ -66,3 +66,8 @@ v11은 기존 기능 안정성을 위해 전체 AppState를 JSONB 1건으로 동
 - 실제 메일 발송 및 운영 Supabase 변경은 이번 제작 중 수행하지 않았습니다. 운영 URL 설정 후 별도 테스트 계정으로 최종 확인하세요.
 
 공식 참고: https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail 및 https://supabase.com/docs/reference/javascript/auth-updateuser
+
+## 후속 수정: 사용자 관리에서 이메일 등록
+이번 이메일 등록 수정본은 `README_EMAIL_REGISTRATION.md`를 우선 따릅니다.
+신규 계정은 실제 복구 이메일로 생성하고, 기존 계정도 사용자 관리 → 수정에서 이메일을 저장할 수 있습니다.
+Supabase admin-users 함수 배포가 반드시 필요하며 GitHub 업로드만으로는 서버 코드가 변경되지 않습니다.
