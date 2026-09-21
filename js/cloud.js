@@ -2,6 +2,10 @@
   const cfg = window.DK_CLOUD_CONFIG || {};
   const configured = cfg.cloudEnabled !== false && cfg.supabaseUrl && !cfg.supabaseUrl.includes('YOUR_PROJECT') && cfg.supabaseKey && !cfg.supabaseKey.includes('YOUR_SUPABASE');
   let client = null;
+  let recoveryUserId = null;
+  const callbackParams = new URLSearchParams(location.hash.slice(1));
+  const callbackQuery = new URLSearchParams(location.search);
+  const callbackFailed = callbackParams.has('error') || callbackQuery.has('error');
   let timer = null;
   let idleHandle = null;
   let pendingReason = '';
@@ -16,7 +20,13 @@
   function emit(){ window.dispatchEvent(new CustomEvent('dk-cloud-status',{detail:{...status}})); }
   function getClient(){
     if(!configured || !window.supabase) return null;
-    if(!client) client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    if(!client) {
+      client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      client.auth.onAuthStateChange((event, session) => {
+        if(event === 'PASSWORD_RECOVERY') recoveryUserId = session?.user?.id || null;
+        if(event === 'SIGNED_OUT') recoveryUserId = null;
+      });
+    }
     return client;
   }
   let sdkLoading=null;
@@ -56,7 +66,7 @@
     if(!configured) return true;
     const s=await session();
     const page=(location.pathname.split('/').pop()||'index.html').toLowerCase();
-    if(!s && page!=='login.html') { location.replace('login.html'); return false; }
+    if(!s && page!=='login.html' && page!=='reset-password.html') { location.replace('login.html'); return false; }
     if(s && page==='login.html') { location.replace(localStorage.getItem('DK_LAST_PAGE_V10')||'index.html'); return false; }
     return true;
   }
@@ -76,7 +86,50 @@
     await session();
     return Object.assign({},sessionData,{profile:data.profile||null});
   }
-  async function signOut(){ const c=getClient(); if(c) await c.auth.signOut(); profileCache=null;status.profile=null;localStorage.removeItem(PROFILE_KEY);location.replace('login.html'); }
+  async function signOut(options={}) {
+    const c=await waitForClient();
+    if(!c) throw new Error('인증 연결을 확인해 주세요.');
+    const {error}=await c.auth.signOut(options.local ? {scope:'local'} : undefined);
+    if(error) throw error;
+    profileCache=null; profileRefreshed=false; recoveryUserId=null;
+    status.profile=null; status.authenticated=false; status.email='';
+    localStorage.removeItem(PROFILE_KEY); emit();
+    if(options.redirect !== false) location.replace('login.html');
+  }
+  function recoveryRedirectUrl() {
+    return new URL('reset-password.html', new URL('./', location.href)).href;
+  }
+  async function sendPasswordReset(email) {
+    email=String(email||'').trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('등록된 이메일 주소를 입력하세요.');
+    if(/@daekyung\.local$/i.test(email)) throw new Error('이메일을 사용할 수 없는 계정은 관리자에게 초기화를 요청하세요.');
+    const c=await waitForClient();
+    if(!c) throw new Error('인증 연결을 확인해 주세요.');
+    const {error}=await c.auth.resetPasswordForEmail(email,{redirectTo:recoveryRedirectUrl()});
+    if(error) throw error;
+  }
+  async function preparePasswordRecovery() {
+    const c=await waitForClient();
+    if(!c) throw new Error('인증 연결을 확인해 주세요.');
+    const {error:initError}=await c.auth.initialize();
+    if(initError || callbackFailed || !recoveryUserId) throw new Error('재설정 링크가 만료되었거나 유효하지 않습니다. 로그인 화면에서 새 링크를 요청하세요.');
+    const {data,error}=await c.auth.getUser();
+    if(error || !data.user || data.user.id!==recoveryUserId) throw new Error('재설정 링크를 다시 요청하세요.');
+    // Remove credentials from the address bar; never store recovery tokens ourselves.
+    history.replaceState(null,'',location.pathname);
+    return true;
+  }
+  async function updateRecoveryPassword(password, confirmation) {
+    if(password.length<8) throw new Error('비밀번호는 8자 이상 입력하세요.');
+    if(password!==confirmation) throw new Error('비밀번호 확인이 일치하지 않습니다.');
+    await preparePasswordRecovery();
+    const c=await waitForClient();
+    const {error}=await c.auth.updateUser({password});
+    if(error) throw error;
+    recoveryUserId=null;
+    try { await signOut({local:true,redirect:false}); return {signedOut:true}; }
+    catch { return {signedOut:false}; }
+  }
   async function pullState(){
     const c=await waitForClient(); const s=await session(); if(!c||!s) return null;
     const {data,error}=await c.from('app_state').select('state_data,updated_at,last_reason').eq('workspace_id',cfg.workspaceId).maybeSingle();
@@ -218,5 +271,5 @@
   }
   window.addEventListener('online',()=>{status.online=true;emit(); if(window.state) queuePush(window.state,'online');});
   window.addEventListener('offline',()=>{status.online=false;emit();});
-  window.DKCloud={configured,status,getClient,waitForClient,session,requireAuth,signIn,signOut,pullState,pushState,replaceAllState,queuePush,bootstrap,safeMergeState};
+  window.DKCloud={configured,status,getClient,waitForClient,session,requireAuth,signIn,signOut,recoveryRedirectUrl,sendPasswordReset,preparePasswordRecovery,updateRecoveryPassword,pullState,pushState,replaceAllState,queuePush,bootstrap,safeMergeState};
 })();
