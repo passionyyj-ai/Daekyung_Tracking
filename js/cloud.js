@@ -3,6 +3,15 @@
   const configured = cfg.cloudEnabled !== false && cfg.supabaseUrl && !cfg.supabaseUrl.includes('YOUR_PROJECT') && cfg.supabaseKey && !cfg.supabaseKey.includes('YOUR_SUPABASE');
   let client = null;
   let recoveryUserId = null;
+  const recoveryWaiters = new Set();
+  function waitForRecoveryEvent(timeout=5000) {
+    if(recoveryUserId) return Promise.resolve();
+    return new Promise(resolve=>{
+      const finish=()=>{clearTimeout(timer);recoveryWaiters.delete(finish);resolve();};
+      const timer=setTimeout(finish,timeout);
+      recoveryWaiters.add(finish);
+    });
+  }
   const callbackParams = new URLSearchParams(location.hash.slice(1));
   const callbackQuery = new URLSearchParams(location.search);
   const callbackFailed = callbackParams.has('error') || callbackQuery.has('error');
@@ -23,7 +32,10 @@
     if(!client) {
       client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
       client.auth.onAuthStateChange((event, session) => {
-        if(event === 'PASSWORD_RECOVERY') recoveryUserId = session?.user?.id || null;
+        if(event === 'PASSWORD_RECOVERY') {
+          recoveryUserId = session?.user?.id || null;
+          recoveryWaiters.forEach(finish=>finish());
+        }
         if(event === 'SIGNED_OUT') recoveryUserId = null;
       });
     }
@@ -112,6 +124,8 @@
     const c=await waitForClient();
     if(!c) throw new Error('인증 연결을 확인해 주세요.');
     const {error:initError}=await c.auth.initialize();
+    // The bundled SDK dispatches PASSWORD_RECOVERY in setTimeout after initialize resolves.
+    if(!initError && !callbackFailed && !recoveryUserId) await waitForRecoveryEvent();
     if(initError || callbackFailed || !recoveryUserId) throw new Error('재설정 링크가 만료되었거나 유효하지 않습니다. 로그인 화면에서 새 링크를 요청하세요.');
     const {data,error}=await c.auth.getUser();
     if(error || !data.user || data.user.id!==recoveryUserId) throw new Error('재설정 링크를 다시 요청하세요.');
