@@ -7,7 +7,7 @@ const cors = {
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' },
+  headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
 })
 const value = (body: Record<string, unknown>, keys: string[]) => {
   for (const key of keys) {
@@ -24,9 +24,10 @@ Deno.serve(async (req) => {
     let body: Record<string, unknown>
     try { body = await req.json() }
     catch { return json({ error: '로그인 요청 형식이 올바르지 않습니다.' }, 400) }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: '로그인 요청 형식이 올바르지 않습니다.' }, 400)
 
     const username = value(body, ['username', 'loginId', 'login_id', 'userId', 'user_id', 'identifier', 'id', 'email']).toLowerCase()
-    const password = value(body, ['password', 'pw', 'passwd'])
+    const password = [body.password, body.pw, body.passwd].find((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0)
     if (!username || !password) return json({ error: '아이디와 비밀번호를 입력하세요.' }, 400)
 
     const url = Deno.env.get('SUPABASE_URL') || ''
@@ -36,8 +37,13 @@ Deno.serve(async (req) => {
 
     const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } })
     const client = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } })
-    const { data: profile, error: profileError } = await admin.from('profiles')
-      .select('id,username,display_name,role,is_active').ilike('username', username).maybeSingle()
+    const profiles = () => admin.from('profiles').select('id,username,display_name,role,is_active')
+    let result = await profiles().eq('username', username).maybeSingle()
+    if (!result.data && !result.error && !username.includes('*')) {
+      const literalUsername = username.replace(/[\\%_]/g, character => '\\' + character)
+      result = await profiles().ilike('username', literalUsername).maybeSingle()
+    }
+    const { data: profile, error: profileError } = result
     if (profileError) {
       console.error('profile lookup failed', profileError)
       return json({ error: '사용자 정보를 조회하지 못했습니다. profiles 설정을 확인하세요.' }, 500)
@@ -50,7 +56,7 @@ Deno.serve(async (req) => {
       return json({ error: '계정 연결 정보를 확인할 수 없습니다.' }, 401)
     }
     const { data, error } = await client.auth.signInWithPassword({ email: userData.user.email, password })
-    if (error || !data.session) return json({ error: '아이디 또는 비밀번호를 확인하세요.' }, 401)
+    if (error || !data.session || data.session.user.id !== profile.id) return json({ error: '아이디 또는 비밀번호를 확인하세요.' }, 401)
 
     return json({
       access_token: data.session.access_token,
@@ -61,6 +67,6 @@ Deno.serve(async (req) => {
     })
   } catch (error) {
     console.error('auth-login failed', error)
-    return json({ error: error instanceof Error ? error.message : String(error) }, 500)
+    return json({ error: '로그인 요청을 처리하지 못했습니다.' }, 500)
   }
 })

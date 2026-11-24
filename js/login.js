@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     button.disabled=true; el('loginMessage').textContent='로그인 확인 중...';
     try {
       await DKCloud.signIn(el('loginUsername').value.trim(),el('loginPassword').value);
-      location.replace(localStorage.getItem('DK_LAST_PAGE_V10')||'index.html');
+      location.replace(DKCloud.landingPage());
     } catch { el('loginMessage').textContent='로그인하지 못했습니다. 아이디·비밀번호 또는 연결 상태를 확인하세요.'; }
     finally { button.disabled=false; }
   });

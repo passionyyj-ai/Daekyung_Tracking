@@ -1,18 +1,27 @@
 (function(){
   const $=id=>document.getElementById(id); let rows=[]; let loading=false; let emailSupported=false;
+  const loginRequired='로그인 세션을 확인할 수 없습니다. 다시 로그인한 뒤 시도하세요.';
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   async function invoke(body){
     const c=await DKCloud.waitForClient(),cfg=window.DK_CLOUD_CONFIG||{};
     if(!c)throw new Error('Cloud 라이브러리를 불러오지 못했습니다. 잠시 후 새로고침하세요.');
     const {data:sessionData,error:sessionError}=await c.auth.getSession();
-    if(sessionError)throw sessionError;
+    if(sessionError)throw new Error(loginRequired);
     const s=sessionData?.session;
-    if(!s)throw new Error('로그인이 필요합니다.');
-    const response=await fetch(`${String(cfg.supabaseUrl||'').replace(/\/$/,'')}/functions/v1/admin-users`,{
+    if(!s?.access_token)throw new Error(loginRequired);
+    const send=token=>fetch(`${String(cfg.supabaseUrl||'').replace(/\/$/,'')}/functions/v1/admin-users`,{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey,'Authorization':`Bearer ${s.access_token}`},
+      headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey,'Authorization':`Bearer ${token}`},
       body:JSON.stringify(body)
     });
+    let response=await send(s.access_token);
+    if(response.status===401){
+      const {data,error}=await c.auth.refreshSession();
+      const refreshed=data?.session;
+      if(error||!s.user?.id||!refreshed?.access_token||refreshed.user?.id!==s.user.id)throw new Error(loginRequired);
+      response=await send(refreshed.access_token);
+      if(response.status===401)throw new Error(loginRequired);
+    }
     let data={}; try{data=await response.json();}catch(e){}
     if(!response.ok)throw new Error(data?.error||data?.message||`사용자 서버 오류 (${response.status})`);
     if(data?.error)throw new Error(data.error);
@@ -28,7 +37,20 @@
   }
   function edit(i){const u=rows[i];if(!u)return;$('userId').value=u.id||'';$('userUsername').value=u.username||'';$('userName').value=u.display_name||'';$('userEmail').value=u.email||'';$('userRole').value=u.role||'viewer';$('userActive').checked=!!u.is_active;$('userPassword').value='';}
   function clear(){['userId','userUsername','userName','userEmail','userPassword'].forEach(id=>$(id).value='');$('userRole').value='viewer';$('userActive').checked=true;}
-  async function save(){if(!emailSupported){$('userMessage').textContent='Supabase admin-users 함수 업데이트 후 다시 시도하세요.';return;}if(!$('userEmail').reportValidity())return;const id=$('userId').value,payload={action:id?'update':'create',id:id||undefined,username:$('userUsername').value.trim(),display_name:$('userName').value.trim(),email:$('userEmail').value.trim(),role:$('userRole').value,is_active:$('userActive').checked,password:$('userPassword').value};if(!id&&!payload.email)return alert('신규 사용자의 복구 이메일을 입력하세요.');if(!payload.username)return alert('아이디를 입력하세요.');if(!id&&!payload.password)return alert('신규 사용자의 비밀번호를 입력하세요.');try{await invoke(payload);$('userMessage').textContent='저장되었습니다.';clear();await load();}catch(e){$('userMessage').textContent='저장 실패: '+(e.message||e);}}
+  async function save(){
+    const id=$('userId').value,password=$('userPassword').value;
+    if(id&&password){$('userMessage').textContent='기존 계정의 비밀번호를 바꾸려면 비밀번호 변경 버튼을 누르세요.';return;}
+    if(!emailSupported){$('userMessage').textContent='Supabase admin-users 함수 업데이트 후 다시 시도하세요.';return;}
+    if(!$('userEmail').reportValidity())return;
+    const email=$('userEmail').value.trim();
+    const previousEmail=rows.find(user=>user.id===id)?.email||'';
+    const payload={action:id?'update':'create',id:id||undefined,username:$('userUsername').value.trim(),display_name:$('userName').value.trim(),email:id&&email.toLowerCase()===previousEmail.toLowerCase()?'':email,role:$('userRole').value,is_active:$('userActive').checked};
+    if(!id&&!payload.email)return alert('신규 사용자의 복구 이메일을 입력하세요.');
+    if(!payload.username)return alert('아이디를 입력하세요.');
+    if(!id&&!password)return alert('신규 사용자의 비밀번호를 입력하세요.');
+    if(!id)payload.password=password;
+    try{await invoke(payload);$('userMessage').textContent='저장되었습니다.';clear();await load();}catch(e){$('userMessage').textContent='저장 실패: '+(e.message||e);}
+  }
   async function resetPassword(){const id=$('userId').value,password=$('userPassword').value;if(!id)return alert('사용자를 먼저 선택하세요.');if(!password)return alert('새 비밀번호를 입력하세요.');try{await invoke({action:'reset-password',id,password});$('userMessage').textContent='비밀번호를 변경했습니다.';$('userPassword').value='';}catch(e){$('userMessage').textContent='변경 실패: '+(e.message||e);}}
   function renderRoleAccess(){
     const target=$('roleAccessTable');if(!target||!window.DK_MENU_DEFS)return;

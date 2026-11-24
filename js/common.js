@@ -520,8 +520,10 @@ function applyRoleAccess(profile){
   const key=currentMenuKey();
   if(key&&!allowed.has(key)){
     const first=DK_MENU_DEFS.find(x=>allowed.has(x[0]));
-    alert(`${DK_ROLE_LABELS[role]||role} 권한으로는 이 메뉴에 접근할 수 없습니다.`);
-    location.replace(first?.[2]||'login.html');
+    const message=`${DK_ROLE_LABELS[role]||role} 권한으로는 이 메뉴에 접근할 수 없습니다.`;
+    if(first){alert(message);location.replace(first[2]);return;}
+    const content=document.querySelector('main section');
+    if(content)content.textContent=message;
   }
 }
 async function commonInit() {
@@ -533,6 +535,7 @@ async function commonInit() {
   if(window.DKCloud){
     try{
       const boot=await DKCloud.bootstrap();
+      if(boot?.mode==='redirect')return;
       if(boot?.remote?.state_data){
         const mainRemoteState=migrateState(boot.remote.state_data);
         const localHasPendingChanges=!!state.meta?.cloudDirtyAt;
@@ -554,7 +557,7 @@ async function commonInit() {
         }
       } else if(boot?.mode==='cloud') DKCloud.queuePush(state,'bootstrap-first-upload');
       applyRoleAccess(DKCloud.status.profile);
-    }catch(e){ console.error(e); }
+    }catch(e){ console.error(e);applyRoleAccess(DKCloud.status.profile); }
   }
   renderResetSummary();
 }
@@ -622,7 +625,6 @@ function installCloudControls(){
       user.textContent=d.profile?.display_name||d.profile?.username||d.email||'';
       user.title=[d.profile?.display_name,d.profile?.username||d.email].filter(Boolean).join(' · ');
     }
-    applyRoleAccess(d.profile);
   };
   window.addEventListener('dk-cloud-status',e=>paint(e.detail));
   if(window.DKCloud) paint(DKCloud.status);

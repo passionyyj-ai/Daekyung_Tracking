@@ -4,7 +4,7 @@
 기준 소스는 첨부된 v12 계열이며 기존 아이디 로그인과 데이터를 유지합니다.
 
 ## 반드시 두 곳에 반영
-1. Supabase의 기존 `admin-users` Edge Function을 이 ZIP의 `supabase/functions/admin-users/index.ts` 전체 코드로 교체하여 배포합니다. 기존 함수의 환경 변수 및 설정은 유지합니다. CLI를 사용한다면 해당 프로젝트에 연결한 뒤 `supabase functions deploy admin-users`로 배포할 수 있습니다.
+1. Supabase의 기존 `admin-users` Edge Function을 이 ZIP의 `supabase/functions/admin-users/index.ts` 전체 코드로 교체하여 배포합니다. 기존 환경 변수를 유지하고, 최신 함수의 인증 설정은 `V12_USER_SETUP.md`를 따릅니다. CLI를 사용한다면 해당 프로젝트에 연결한 뒤 `supabase functions deploy admin-users --no-verify-jwt`로 배포할 수 있습니다.
 2. ZIP 내용을 GitHub 저장소 루트에 반영합니다. 특히 settings.html, js/users.js를 교체하세요. 첫 복구 버전을 적용하지 않았다면 전체 파일을 반영하세요. 기존 운영 js/config.js 값은 유지합니다.
 3. GitHub Pages 배포 후 Ctrl+F5로 새로고침합니다.
 4. 관리자 로그인 → 환경설정 → 사용자 관리 → 사용자 목록에서 수정 → 복구 이메일 입력 → 사용자 저장.

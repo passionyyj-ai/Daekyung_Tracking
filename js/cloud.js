@@ -20,11 +20,15 @@
   let pendingReason = '';
   let syncing = false;
   let lastError = '';
-  const PROFILE_KEY='DK_AUTH_PROFILE_V12';
   let profileCache=null;
-  let profileRefreshed=false;
-  try{profileCache=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null');}catch(e){}
-  const status = { configured, authenticated:false, email:'', profile:profileCache, online:navigator.onLine, syncing:false, lastSyncAt:'', lastError:'' };
+  let profileRequest=null;
+  let sessionUserId=null;
+  const status = { configured, authenticated:false, email:'', profile:null, online:navigator.onLine, syncing:false, lastSyncAt:'', lastError:'' };
+
+  function resetProfile(userId=null){
+    sessionUserId=userId;profileCache=null;profileRequest=null;
+    status.profile=null;status.authenticated=false;status.email='';
+  }
 
   function emit(){ window.dispatchEvent(new CustomEvent('dk-cloud-status',{detail:{...status}})); }
   function getClient(){
@@ -36,7 +40,7 @@
           recoveryUserId = session?.user?.id || null;
           recoveryWaiters.forEach(finish=>finish());
         }
-        if(event === 'SIGNED_OUT') recoveryUserId = null;
+        if(event === 'SIGNED_OUT') { recoveryUserId=null;resetProfile();emit(); }
       });
     }
     return client;
@@ -64,48 +68,57 @@
     const c=await waitForClient(); if(!c) return null;
     const {data,error}=await c.auth.getSession();
     if(error) throw error;
-    const s=data.session || null;
-    status.authenticated=!!s; status.email=profileCache?.username||s?.user?.email||'';
-    if(s && !profileRefreshed){
-      const {data:profile}=await c.from('profiles').select('id,username,display_name,role,is_active').eq('id',s.user.id).maybeSingle();
-      profileRefreshed=true;
-      if(profile){profileCache=profile;status.profile=profile;status.email=profile.username||s.user.email||'';localStorage.setItem(PROFILE_KEY,JSON.stringify(profile));}
+    const s=data.session;
+    const userId=s?.user?.id||null;
+    if(sessionUserId!==userId)resetProfile(userId);
+    if(!s||!userId){emit();return null;}
+    if(!profileCache){
+      const request=profileRequest||(profileRequest=Promise.resolve(c.from('profiles').select('id,username,display_name,role,is_active').eq('id',userId).maybeSingle()));
+      let result;
+      try{result=await request;}
+      finally{if(profileRequest===request)profileRequest=null;}
+      if(sessionUserId!==userId)return null;
+      if(result.error)throw result.error;
+      profileCache=result.data;
     }
+    if(!profileCache?.is_active){await signOut({local:true,redirect:false});return null;}
+    status.authenticated=true;status.profile=profileCache;status.email=profileCache.username||s.user.email||'';
     emit();
     return s;
+  }
+  function landingPage(){
+    const page=localStorage.getItem('DK_LAST_PAGE_V10')||'';
+    return /^[a-z0-9_]+\.html$/i.test(page)&&!/^login\.html$/i.test(page)?page:'index.html';
   }
   async function requireAuth(){
     if(!configured) return true;
     const s=await session();
     const page=(location.pathname.split('/').pop()||'index.html').toLowerCase();
     if(!s && page!=='login.html' && page!=='reset-password.html') { location.replace('login.html'); return false; }
-    if(s && page==='login.html') { location.replace(localStorage.getItem('DK_LAST_PAGE_V10')||'index.html'); return false; }
+    if(s && page==='login.html') { location.replace(landingPage()); return false; }
     return true;
   }
   async function signIn(username,password){
     const c=await waitForClient(); if(!c) throw new Error('Cloud 라이브러리를 불러오지 못했습니다. 잠시 후 새로고침하세요.');
     const loginBody={action:'login',op:'login',username,loginId:username,login_id:username,identifier:username,id:username,password};
     const response=await fetch(`${String(cfg.supabaseUrl).replace(/\/$/,'')}/functions/v1/auth-login`,{
-      method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey,'Authorization':`Bearer ${cfg.supabaseKey}`},body:JSON.stringify(loginBody)
+      method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.supabaseKey},body:JSON.stringify(loginBody)
     });
     let data={}; try{data=await response.json();}catch(e){}
     if(!response.ok) throw new Error(data?.error||data?.message||`로그인 서버 오류 (${response.status})`);
     if(!data?.access_token||!data?.refresh_token) throw new Error(data?.error||'로그인 응답을 확인할 수 없습니다.');
     const {data:sessionData,error:sessionError}=await c.auth.setSession({access_token:data.access_token,refresh_token:data.refresh_token});
     if(sessionError) throw sessionError;
-    profileCache=data.profile||null; profileRefreshed=!!profileCache; status.profile=profileCache;
-    if(profileCache)localStorage.setItem(PROFILE_KEY,JSON.stringify(profileCache));
-    await session();
-    return Object.assign({},sessionData,{profile:data.profile||null});
+    resetProfile(sessionData.session?.user?.id||null);
+    if(!await session())throw new Error('이 계정으로 로그인할 수 없습니다. 관리자에게 문의하세요.');
+    return Object.assign({},sessionData,{profile:profileCache});
   }
   async function signOut(options={}) {
     const c=await waitForClient();
     if(!c) throw new Error('인증 연결을 확인해 주세요.');
     const {error}=await c.auth.signOut(options.local ? {scope:'local'} : undefined);
     if(error) throw error;
-    profileCache=null; profileRefreshed=false; recoveryUserId=null;
-    status.profile=null; status.authenticated=false; status.email='';
-    localStorage.removeItem(PROFILE_KEY); emit();
+    resetProfile();recoveryUserId=null;emit();
     if(options.redirect !== false) location.replace('login.html');
   }
   function recoveryRedirectUrl() {
@@ -285,5 +298,5 @@
   }
   window.addEventListener('online',()=>{status.online=true;emit(); if(window.state) queuePush(window.state,'online');});
   window.addEventListener('offline',()=>{status.online=false;emit();});
-  window.DKCloud={configured,status,getClient,waitForClient,session,requireAuth,signIn,signOut,recoveryRedirectUrl,sendPasswordReset,preparePasswordRecovery,updateRecoveryPassword,pullState,pushState,replaceAllState,queuePush,bootstrap,safeMergeState};
+  window.DKCloud={configured,status,getClient,waitForClient,session,requireAuth,landingPage,signIn,signOut,recoveryRedirectUrl,sendPasswordReset,preparePasswordRecovery,updateRecoveryPassword,pullState,pushState,replaceAllState,queuePush,bootstrap,safeMergeState};
 })();
